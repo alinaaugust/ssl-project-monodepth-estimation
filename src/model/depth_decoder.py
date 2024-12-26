@@ -3,13 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class DepthDecoder2(nn.Module):
+class DepthDecoder(nn.Module):
     def __init__(self, num_ch_enc, scales=[0, 1, 2, 3], enable_skips=True):
         """
         num_ch_enc: list of the number of output channels at each encoder level.
         scales: which resolution levels to compute depth maps.
         """
-        super(DepthDecoder2, self).__init__()
+        super(DepthDecoder, self).__init__()
 
         self.scales = scales
         self.num_ch_enc = num_ch_enc

@@ -11,6 +11,14 @@ from torchvision import transforms
 logger = logging.getLogger(__name__)
 
 
+def pil_loader(path):
+    # open path as file to avoid ResourceWarning
+    # (https://github.com/python-pillow/Pillow/issues/835)
+    with open(path, "rb") as f:
+        with Image.open(f) as img:
+            return img.convert("RGB")
+
+
 class BaseDataset(Dataset):
     """
     Base class for the datasets.
@@ -62,6 +70,7 @@ class BaseDataset(Dataset):
 
         self.img_format = img_format
         self.split = split
+        self.loader = pil_loader
 
         self.get_tensor = transforms.ToTensor()
         self.get_resize = {
@@ -128,7 +137,7 @@ class BaseDataset(Dataset):
                 )
             else:
                 instance_data[("color", f, -1)] = self.get_color(
-                    path, idx + f, side, use_flip
+                    path, idx + str(f), side, use_flip
                 )
 
         for scale_idx in range(self.num_scaling_factors):
@@ -168,7 +177,7 @@ class BaseDataset(Dataset):
         """
         Get length of the dataset (length of the index).
         """
-        return len(self._index)
+        return len(self.filenames)
 
     def preprocess_data(self, instance_data, use_color):
         """

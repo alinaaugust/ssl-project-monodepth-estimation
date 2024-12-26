@@ -34,7 +34,7 @@ class KITTIDataset(BaseDataset):
         frame_index = int(line[1])
 
         velo_filename = os.path.join(
-            self.data_path,
+            self.data_dir,
             scene_name,
             "velodyne_points/data/{:010d}.bin".format(int(frame_index)),
         )
@@ -57,17 +57,17 @@ class KITTIRAWDataset(KITTIDataset):
         super(KITTIRAWDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
-        f_str = "{:010d}{}".format(frame_index, self.img_ext)
+        f_str = "{:010d}{}".format(frame_index, self.img_format)
         image_path = os.path.join(
-            self.data_path, folder, "image_0{}/data".format(self.side_map[side]), f_str
+            self.data_dir, folder, "image_0{}/data".format(self.side_map[side]), f_str
         )
         return image_path
 
     def get_depth(self, folder, frame_index, side, do_flip):
-        calib_path = os.path.join(self.data_path, folder.split("/")[0])
+        calib_path = os.path.join(self.data_dir, folder.split("/")[0])
 
         velo_filename = os.path.join(
-            self.data_path,
+            self.data_dir,
             folder,
             "velodyne_points/data/{:010d}.bin".format(int(frame_index)),
         )
@@ -94,9 +94,9 @@ class KITTIOdomDataset(KITTIDataset):
         super(KITTIOdomDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
-        f_str = "{:06d}{}".format(frame_index, self.img_ext)
+        f_str = "{:06d}{}".format(frame_index, self.img_format)
         image_path = os.path.join(
-            self.data_path,
+            self.data_dir,
             "sequences/{:02d}".format(int(folder)),
             "image_{}".format(self.side_map[side]),
             f_str,
@@ -111,16 +111,16 @@ class KITTIDepthDataset(KITTIDataset):
         super(KITTIDepthDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
-        f_str = "{:010d}{}".format(frame_index, self.img_ext)
+        f_str = "{:010d}{}".format(frame_index, self.img_format)
         image_path = os.path.join(
-            self.data_path, folder, "image_0{}/data".format(self.side_map[side]), f_str
+            self.data_dir, folder, "image_0{}/data".format(self.side_map[side]), f_str
         )
         return image_path
 
     def get_depth(self, folder, frame_index, side, do_flip):
         f_str = "{:010d}.png".format(frame_index)
         depth_path = os.path.join(
-            self.data_path,
+            self.data_dir,
             folder,
             "proj_depth/groundtruth/image_0{}".format(self.side_map[side]),
             f_str,

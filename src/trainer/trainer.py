@@ -11,7 +11,7 @@ from src.model import (
     ResNetEncoder,
     MultiImageResNet,
     PoseEstimationDecoder,
-    DepthDecoder2,
+    DepthDecoder,
 )
 
 import json
@@ -22,7 +22,7 @@ from kitti_utils import *
 # from layers import *
 
 from src.datasets import KITTIDepthDataset, KITTIRAWDataset, KITTIOdomDataset
-from src.loss import SSIMLoss, calculate_losses
+from src.loss import SSIMLoss, calculate_losses, depth_errors
 from src.model import BackprojectDepth, Project3D
 from IPython import embed
 
@@ -51,7 +51,7 @@ class Trainer:
         self.models["encoder"] = ResNetEncoder(
             self.config.num_layers, self.config.weights == "pretrained"
         ).to(self.device)
-        self.models["depth_decoder"] = DepthDecoder2(
+        self.models["depth_decoder"] = DepthDecoder(
             self.models["encoder"].num_ch_enc, self.config.scaling_factors
         ).to(self.device)
         self.model_parameters += list(self.models["encoder"].parameters())
@@ -61,7 +61,7 @@ class Trainer:
             if self.config.pose_model_type == "separate_resnet":
                 self.models["pose_encoder"] = ResNetEncoder(
                     self.config.num_layers,
-                    self.config.weigths == "pretrained",
+                    self.config.weights == "pretrained",
                     num_input_images=self.num_pose_frames,
                 ).to(self.device)
 
@@ -69,8 +69,8 @@ class Trainer:
 
                 self.models["pose"] = PoseEstimationDecoder(
                     self.models["pose_encoder"].num_ch_enc,
-                    num_input_features=1,
-                    num_frames_to_predict_for=2,
+                    input_feature_count=1,
+                    frames_to_predict=2,
                 )
 
             elif self.config.pose_model_type == "shared":
@@ -79,14 +79,14 @@ class Trainer:
                 )
 
         if self.config.use_predictive_mask:
-            self.models["predictive_mask"] = DepthDecoder2(
+            self.models["predictive_mask"] = DepthDecoder(
                 self.models["encoder"].num_ch_enc,
                 self.config.scaling_factors,
                 num_output_channels=(len(self.config.frame_ids) - 1),
             ).to(self.device)
             self.model_parameters += list(self.models["predictive_mask"].parameters())
 
-        self.optimizer = optim.Adam(self.parameters_to_train, self.config.lr)
+        self.optimizer = optim.Adam(self.model_parameters, self.config.lr)
         self.lr_scheduler = optim.lr_scheduler.StepLR(
             self.optimizer, self.config.scheduler_step_size, 0.1
         )
@@ -97,19 +97,26 @@ class Trainer:
 
         print(f"Starting run: {self.config.run_name}\n")
         print("Training model: ", self.config.model_name, "\n")
-        print("Models are saved in:  ", self.config.log_dir, "\n")
+        print("Models are saved in:  ", self.config.logs_dir, "\n")
         print("Current device:  ", self.device, "\n")
 
         self.dataset = (
             KITTIRAWDataset if self.config.dataset == "kitti" else KITTIOdomDataset
         )
         fpath = os.path.join(
-            os.path.dirname(__file__), "splits", self.config.split, "{}_files.txt"
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(__file__))
+            ),  # Поднимаемся на два уровня вверх
+            "splits",
+            self.config.split,
+            "{}_files.txt",
         )
+        print(__file__)
+        print(fpath)
 
         train_filenames = readlines(fpath.format("train"))
         val_filenames = readlines(fpath.format("val"))
-        img_format = ".png" if self.config.use_png else ".jpg"
+        img_format = ".png" if self.config.png else ".jpg"
 
         num_train_samples = len(train_filenames)
         self.num_total_steps = (
@@ -160,11 +167,13 @@ class Trainer:
 
         self.backproject_depth = {}
         self.project_3d = {}
-        for scale in self.config.scales:
+        for scale in self.config.scaling_factors:
             h = self.config.height // (2 ** scale)
             w = self.config.width // (2 ** scale)
 
-            self.backproject_depth[scale] = BackprojectDepth(self.config.batch_size, h, w)
+            self.backproject_depth[scale] = BackprojectDepth(
+                self.config.batch_size, h, w
+            )
             self.backproject_depth[scale].to(self.device)
 
             self.project_3d[scale] = Project3D(self.config.batch_size, h, w)
@@ -225,7 +234,9 @@ class Trainer:
 
             duration = time.time() - before_op_time
 
-            early_phase = batch_idx % self.config.log_frequency == 0 and self.step < 2000
+            early_phase = (
+                batch_idx % self.config.log_frequency == 0 and self.step < 2000
+            )
             late_phase = self.step % 2000 == 0
 
             if early_phase or late_phase:
@@ -333,7 +344,7 @@ class Trainer:
         """Generate the warped (reprojected) color images for a minibatch.
         Generated images are saved into the `outputs` dictionary.
         """
-        for scale in self.config.scales:
+        for scale in self.config.scaling_factors:
             disp = outputs[("disp", scale)]
             if self.config.v1_multiscale:
                 source_scale = scale
@@ -392,6 +403,41 @@ class Trainer:
                         ("color", frame_id, source_scale)
                     ]
 
+    def compute_depth_losses(self, inputs, outputs, losses):
+        """Compute depth metrics, to allow monitoring during training
+
+        This isn't particularly accurate as it averages over the entire batch,
+        so is only used to give an indication of validation performance
+        """
+        depth_pred = outputs[("depth", 0, 0)]
+        depth_pred = torch.clamp(
+            F.interpolate(
+                depth_pred, [375, 1242], mode="bilinear", align_corners=False
+            ),
+            1e-3,
+            80,
+        )
+        depth_pred = depth_pred.detach()
+
+        depth_gt = inputs["depth_gt"]
+        mask = depth_gt > 0
+
+        # garg/eigen crop
+        crop_mask = torch.zeros_like(mask)
+        crop_mask[:, :, 153:371, 44:1197] = 1
+        mask = mask * crop_mask
+
+        depth_gt = depth_gt[mask]
+        depth_pred = depth_pred[mask]
+        depth_pred *= torch.median(depth_gt) / torch.median(depth_pred)
+
+        depth_pred = torch.clamp(depth_pred, min=1e-3, max=80)
+
+        depth_errors = depth_errors(depth_gt, depth_pred)
+
+        for i, metric in enumerate(self.depth_metric_names):
+            losses[metric] = np.array(depth_errors[i].cpu())
+
     def process_batch(self, inputs):
         """Pass a minibatch through the network and generate images and losses"""
         for key, ipt in inputs.items():
@@ -402,7 +448,9 @@ class Trainer:
                 [inputs[("color_aug", i, 0)] for i in self.config.frame_ids]
             )
             all_features = self.models["encoder"](all_color_aug)
-            all_features = [torch.split(f, self.config.batch_size) for f in all_features]
+            all_features = [
+                torch.split(f, self.config.batch_size) for f in all_features
+            ]
 
             features = {}
             for i, k in enumerate(self.config.frame_ids):
