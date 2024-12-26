@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import torch.nn.functional as F
 
 def smoothness_loss(disparity, image):
     """
@@ -78,3 +79,94 @@ def compute_reprojection_loss(pred, target, ssim_fn, no_ssim=False):
         reprojection_loss = 0.85 * ssim_loss + 0.15 * l1_loss
 
     return reprojection_loss
+
+
+
+def compute_losses(inputs, outputs, opts):
+    """
+    Compute the reprojection and smoothness losses for a minibatch
+    """
+
+    losses = {}
+    total_loss = 0
+
+    for scale in opts['scales']:
+        loss = 0
+        reprojection_losses = []
+
+        if opts['v1_multiscale']:
+            source_scale = scale
+        else:
+            source_scale = 0
+
+        disp = outputs[("disp", scale)]
+        color = inputs[("color", 0, scale)]
+        target = inputs[("color", 0, source_scale)]
+
+        for frame_id in opts['frame_ids'][1:]:
+            pred = outputs[("color", frame_id, scale)]
+            reprojection_losses.append(compute_reprojection_loss(pred, target))
+
+        reprojection_losses = torch.cat(reprojection_losses, 1)
+
+        if not opts['disable_automasking']:
+            identity_reprojection_losses = []
+            for frame_id in opts['frame_ids'][1:]:
+                pred = inputs[("color", frame_id, source_scale)]
+                identity_reprojection_losses.append(
+                    compute_reprojection_loss(pred, target))
+
+            identity_reprojection_losses = torch.cat(identity_reprojection_losses, 1)
+
+            if opts['avg_reprojection']:
+                identity_reprojection_loss = identity_reprojection_losses.mean(1, keepdim=True)
+            else:
+                identity_reprojection_loss = identity_reprojection_losses
+
+        elif opts['predictive_mask']:
+            mask = outputs["predictive_mask"]["disp", scale]
+            if not opts['v1_multiscale']:
+                mask = F.interpolate(
+                    mask, [opts['height'], opts['width']],
+                    mode="bilinear", align_corners=False)
+
+            reprojection_losses *= mask
+
+            weighting_loss = 0.2 * nn.BCELoss()(mask, torch.ones(mask.shape).cuda())
+            loss += weighting_loss.mean()
+
+        if opts['avg_reprojection']:
+            reprojection_loss = reprojection_losses.mean(1, keepdim=True)
+        else:
+            reprojection_loss = reprojection_losses
+
+        if not opts['disable_automasking']:
+            identity_reprojection_loss += torch.randn(
+                identity_reprojection_loss.shape, device=opts['device']) * 0.00001
+
+            combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
+        else:
+            combined = reprojection_loss
+
+        if combined.shape[1] == 1:
+            to_optimise = combined
+        else:
+            to_optimise, idxs = torch.min(combined, dim=1)
+
+        if not opts['disable_automasking']:
+            outputs["identity_selection/{}".format(scale)] = (
+                idxs > identity_reprojection_loss.shape[1] - 1).float()
+
+        loss += to_optimise.mean()
+
+        mean_disp = disp.mean(2, True).mean(3, True)
+        norm_disp = disp / (mean_disp + 1e-7)
+        smooth_loss = smoothness_loss(norm_disp, color)
+
+        loss += opts['disparity_smoothness'] * smooth_loss / (2 ** scale)
+        total_loss += loss
+        losses["loss/{}".format(scale)] = loss
+
+    total_loss /= opts['num_scales']
+    losses["loss"] = total_loss
+    return losses
