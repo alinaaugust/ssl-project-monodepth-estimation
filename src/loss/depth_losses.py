@@ -21,5 +21,3 @@ def depth_errors(ground_truth, prediction):
     sq_rel_error = np.mean(mse / ground_truth)
 
     return abs_rel_error, sq_rel_error, rmse, rmse_log, delta1, delta2, delta3
-
-
