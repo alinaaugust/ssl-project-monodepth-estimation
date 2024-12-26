@@ -97,14 +97,14 @@ class Trainer:
 
         print(f"Starting run: {self.config.run_name}\n")
         print("Training model: ", self.config.model_name, "\n")
-        print("Models are saved in:  ", self.opt.log_dir, "\n")
+        print("Models are saved in:  ", self.config.log_dir, "\n")
         print("Current device:  ", self.device, "\n")
 
         self.dataset = (
             KITTIRAWDataset if self.config.dataset == "kitti" else KITTIOdomDataset
         )
         fpath = os.path.join(
-            os.path.dirname(__file__), "splits", self.opt.split, "{}_files.txt"
+            os.path.dirname(__file__), "splits", self.config.split, "{}_files.txt"
         )
 
         train_filenames = readlines(fpath.format("train"))
@@ -154,20 +154,20 @@ class Trainer:
         )
         self.val_iter = iter(self.val_loader)
 
-        if not self.opt.no_ssim:
+        if not self.config.no_ssim:
             self.ssim = SSIMLoss()
             self.ssim.to(self.device)
 
         self.backproject_depth = {}
         self.project_3d = {}
-        for scale in self.opt.scales:
-            h = self.opt.height // (2 ** scale)
-            w = self.opt.width // (2 ** scale)
+        for scale in self.config.scales:
+            h = self.config.height // (2 ** scale)
+            w = self.config.width // (2 ** scale)
 
-            self.backproject_depth[scale] = BackprojectDepth(self.opt.batch_size, h, w)
+            self.backproject_depth[scale] = BackprojectDepth(self.config.batch_size, h, w)
             self.backproject_depth[scale].to(self.device)
 
-            self.project_3d[scale] = Project3D(self.opt.batch_size, h, w)
+            self.project_3d[scale] = Project3D(self.config.batch_size, h, w)
             self.project_3d[scale].to(self.device)
 
         self.depth_metric_names = [
@@ -225,7 +225,7 @@ class Trainer:
 
             duration = time.time() - before_op_time
 
-            early_phase = batch_idx % self.opt.log_frequency == 0 and self.step < 2000
+            early_phase = batch_idx % self.config.log_frequency == 0 and self.step < 2000
             late_phase = self.step % 2000 == 0
 
             if early_phase or late_phase:
@@ -248,14 +248,14 @@ class Trainer:
             # separate forward pass through the pose network.
 
             # select what features the pose network takes as input
-            if self.opt.pose_model_type == "shared":
-                pose_feats = {f_i: features[f_i] for f_i in self.opt.frame_ids}
+            if self.config.pose_model_type == "shared":
+                pose_feats = {f_i: features[f_i] for f_i in self.config.frame_ids}
             else:
                 pose_feats = {
-                    f_i: inputs["color_aug", f_i, 0] for f_i in self.opt.frame_ids
+                    f_i: inputs["color_aug", f_i, 0] for f_i in self.config.frame_ids
                 }
 
-            for f_i in self.opt.frame_ids[1:]:
+            for f_i in self.config.frame_ids[1:]:
                 if f_i != "s":
                     # To maintain ordering we always pass frames in temporal order
                     if f_i < 0:
@@ -263,11 +263,11 @@ class Trainer:
                     else:
                         pose_inputs = [pose_feats[0], pose_feats[f_i]]
 
-                    if self.opt.pose_model_type == "separate_resnet":
+                    if self.config.pose_model_type == "separate_resnet":
                         pose_inputs = [
                             self.models["pose_encoder"](torch.cat(pose_inputs, 1))
                         ]
-                    elif self.opt.pose_model_type == "posecnn":
+                    elif self.config.pose_model_type == "posecnn":
                         pose_inputs = torch.cat(pose_inputs, 1)
 
                     axisangle, translation = self.models["pose"](pose_inputs)
@@ -281,25 +281,25 @@ class Trainer:
 
         else:
             # Here we input all frames to the pose net (and predict all poses) together
-            if self.opt.pose_model_type in ["separate_resnet", "posecnn"]:
+            if self.config.pose_model_type in ["separate_resnet", "posecnn"]:
                 pose_inputs = torch.cat(
                     [
                         inputs[("color_aug", i, 0)]
-                        for i in self.opt.frame_ids
+                        for i in self.config.frame_ids
                         if i != "s"
                     ],
                     1,
                 )
 
-                if self.opt.pose_model_type == "separate_resnet":
+                if self.config.pose_model_type == "separate_resnet":
                     pose_inputs = [self.models["pose_encoder"](pose_inputs)]
 
-            elif self.opt.pose_model_type == "shared":
-                pose_inputs = [features[i] for i in self.opt.frame_ids if i != "s"]
+            elif self.config.pose_model_type == "shared":
+                pose_inputs = [features[i] for i in self.config.frame_ids if i != "s"]
 
             axisangle, translation = self.models["pose"](pose_inputs)
 
-            for i, f_i in enumerate(self.opt.frame_ids[1:]):
+            for i, f_i in enumerate(self.config.frame_ids[1:]):
                 if f_i != "s":
                     outputs[("axisangle", 0, f_i)] = axisangle
                     outputs[("translation", 0, f_i)] = translation
@@ -333,24 +333,24 @@ class Trainer:
         """Generate the warped (reprojected) color images for a minibatch.
         Generated images are saved into the `outputs` dictionary.
         """
-        for scale in self.opt.scales:
+        for scale in self.config.scales:
             disp = outputs[("disp", scale)]
-            if self.opt.v1_multiscale:
+            if self.config.v1_multiscale:
                 source_scale = scale
             else:
                 disp = F.interpolate(
                     disp,
-                    [self.opt.height, self.opt.width],
+                    [self.config.height, self.config.width],
                     mode="bilinear",
                     align_corners=False,
                 )
                 source_scale = 0
 
-            _, depth = disp_to_depth(disp, self.opt.min_depth, self.opt.max_depth)
+            _, depth = disp_to_depth(disp, self.config.min_depth, self.config.max_depth)
 
             outputs[("depth", 0, scale)] = depth
 
-            for i, frame_id in enumerate(self.opt.frame_ids[1:]):
+            for i, frame_id in enumerate(self.config.frame_ids[1:]):
 
                 if frame_id == "s":
                     T = inputs["stereo_T"]
@@ -358,7 +358,7 @@ class Trainer:
                     T = outputs[("cam_T_cam", 0, frame_id)]
 
                 # from the authors of https://arxiv.org/abs/1712.00175
-                if self.opt.pose_model_type == "posecnn":
+                if self.config.pose_model_type == "posecnn":
 
                     axisangle = outputs[("axisangle", 0, frame_id)]
                     translation = outputs[("translation", 0, frame_id)]
@@ -387,7 +387,7 @@ class Trainer:
                     padding_mode="border",
                 )
 
-                if not self.opt.disable_automasking:
+                if not self.config.disable_automasking:
                     outputs[("color_identity", frame_id, scale)] = inputs[
                         ("color", frame_id, source_scale)
                     ]
@@ -397,15 +397,15 @@ class Trainer:
         for key, ipt in inputs.items():
             inputs[key] = ipt.to(self.device)
 
-        if self.opt.pose_model_type == "shared":
+        if self.config.pose_model_type == "shared":
             all_color_aug = torch.cat(
-                [inputs[("color_aug", i, 0)] for i in self.opt.frame_ids]
+                [inputs[("color_aug", i, 0)] for i in self.config.frame_ids]
             )
             all_features = self.models["encoder"](all_color_aug)
-            all_features = [torch.split(f, self.opt.batch_size) for f in all_features]
+            all_features = [torch.split(f, self.config.batch_size) for f in all_features]
 
             features = {}
-            for i, k in enumerate(self.opt.frame_ids):
+            for i, k in enumerate(self.config.frame_ids):
                 features[k] = [f[i] for f in all_features]
 
             outputs = self.models["depth"](features[0])
@@ -413,7 +413,7 @@ class Trainer:
             features = self.models["encoder"](inputs["color_aug", 0, 0])
             outputs = self.models["depth"](features)
 
-        if self.opt.predictive_mask:
+        if self.config.predictive_mask:
             outputs["predictive_mask"] = self.models["predictive_mask"](features)
 
         if self.use_pose_net:
@@ -421,7 +421,7 @@ class Trainer:
 
         self.generate_images_pred(inputs, outputs)
         params = {
-            "options": self.opt,
+            "options": self.config,
             "device": self.device,
             "num_scales": self.num_scales,
         }

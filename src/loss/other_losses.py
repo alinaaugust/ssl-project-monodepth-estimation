@@ -96,7 +96,7 @@ def calculate_losses(data_inputs, model_outputs, settings):
         data_inputs (dict): Contains input data (e.g., images at different scales).
         model_outputs (dict): Contains outputs from the model (e.g., disparity maps).
         settings (dict): A dictionary with the following required fields:
-            - "options": object containing configuration options like scales and frame_ids
+            - "config": object containing configuration like scales and frame_ids
             - "device": computation device ("cuda" or "cpu")
             - "num_scales": number of scales for averaging the total loss
             - "reprojection_loss_fn": function to compute reprojection loss
@@ -108,12 +108,12 @@ def calculate_losses(data_inputs, model_outputs, settings):
     loss_details = {}
     cumulative_loss = 0
 
-    for scale_level in settings["options"].scales:
+    for scale_level in settings["config"].scales:
         current_loss = 0
         reprojection_loss_list = []
 
         # Determine the appropriate source scale
-        if settings["options"].v1_multiscale:
+        if settings["config"].v1_multiscale:
             source_scale = scale_level
         else:
             source_scale = 0
@@ -123,7 +123,7 @@ def calculate_losses(data_inputs, model_outputs, settings):
         target_image = data_inputs[("color", 0, source_scale)]
 
         # Compute reprojection losses for each frame
-        for frame_index in settings["options"].frame_ids[1:]:
+        for frame_index in settings["config"].frame_ids[1:]:
             predicted_image = model_outputs[("color", frame_index, scale_level)]
             reprojection_loss_list.append(
                 settings["reprojection_loss_fn"](predicted_image, target_image)
@@ -132,9 +132,9 @@ def calculate_losses(data_inputs, model_outputs, settings):
         reprojection_losses = torch.cat(reprojection_loss_list, dim=1)
 
         # Handle identity reprojection loss if automasking is enabled
-        if not settings["options"].disable_automasking:
+        if not settings["config"].disable_automasking:
             identity_loss_list = []
-            for frame_index in settings["options"].frame_ids[1:]:
+            for frame_index in settings["config"].frame_ids[1:]:
                 identity_prediction = data_inputs[("color", frame_index, source_scale)]
                 identity_loss_list.append(
                     settings["reprojection_loss_fn"](identity_prediction, target_image)
@@ -142,17 +142,17 @@ def calculate_losses(data_inputs, model_outputs, settings):
 
             identity_losses = torch.cat(identity_loss_list, dim=1)
 
-            if settings["options"].avg_reprojection:
+            if settings["config"].avg_reprojection:
                 identity_reprojection_loss = identity_losses.mean(1, keepdim=True)
             else:
                 identity_reprojection_loss = identity_losses
 
-        elif settings["options"].predictive_mask:
+        elif settings["config"].predictive_mask:
             mask = model_outputs["predictive_mask"]["disp", scale_level]
-            if not settings["options"].v1_multiscale:
+            if not settings["config"].v1_multiscale:
                 mask = F.interpolate(
                     mask,
-                    [settings["options"].height, settings["options"].width],
+                    [settings["config"].height, settings["config"].width],
                     mode="bilinear",
                     align_corners=False,
                 )
@@ -165,12 +165,12 @@ def calculate_losses(data_inputs, model_outputs, settings):
             )
             current_loss += mask_loss.mean()
 
-        if settings["options"].avg_reprojection:
+        if settings["config"].avg_reprojection:
             reprojection_loss = reprojection_losses.mean(1, keepdim=True)
         else:
             reprojection_loss = reprojection_losses
 
-        if not settings["options"].disable_automasking:
+        if not settings["config"].disable_automasking:
             # Break ties with small random noise
             identity_reprojection_loss += (
                 torch.randn(identity_reprojection_loss.shape, device=settings["device"])
@@ -189,7 +189,7 @@ def calculate_losses(data_inputs, model_outputs, settings):
         else:
             optimized_loss, indices = torch.min(combined_losses, dim=1)
 
-        if not settings["options"].disable_automasking:
+        if not settings["config"].disable_automasking:
             model_outputs[f"identity_selection/{scale_level}"] = (
                 indices > identity_reprojection_loss.shape[1] - 1
             ).float()
@@ -204,7 +204,7 @@ def calculate_losses(data_inputs, model_outputs, settings):
         )
 
         current_loss += (
-            settings["options"].disparity_smoothness
+            settings["config"].disparity_smoothness
             * smoothness_loss
             / (2 ** scale_level)
         )
