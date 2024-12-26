@@ -9,6 +9,8 @@ pandas
 
 wandb
 wget
+six
+IPython
 
 black
 isort
