@@ -1,0 +1,12 @@
+torch
+numpy
+tqdm
+matplotlib
+pandas
+
+wandb
+wget
+
+black
+isort
+pre-commit
