@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-
 class DepthDecoder2(nn.Module):
     def __init__(self, num_ch_enc, scales=[0, 1, 2, 3], enable_skips=True):
         """
@@ -24,11 +23,16 @@ class DepthDecoder2(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
         for i in range(4, -1, -1):
-            self.upconvs[f"upconv_{i}_0"] = self._conv_block(self.num_ch_enc[-1] if i == 4 else self.num_ch_dec[i + 1], self.num_ch_dec[i])
+            self.upconvs[f"upconv_{i}_0"] = self._conv_block(
+                self.num_ch_enc[-1] if i == 4 else self.num_ch_dec[i + 1],
+                self.num_ch_dec[i],
+            )
             input_channels = self.num_ch_dec[i]
             if self.enable_skips and i > 0:
                 input_channels += self.num_ch_enc[i - 1]
-            self.iconvs[f"iconv_{i}_1"] = self._conv_block(input_channels, self.num_ch_dec[i])
+            self.iconvs[f"iconv_{i}_1"] = self._conv_block(
+                input_channels, self.num_ch_dec[i]
+            )
             if i in self.scales:
                 self.disps[f"disp_{i}"] = self._conv3_disp(self.num_ch_dec[i], 1)
 
@@ -45,7 +49,7 @@ class DepthDecoder2(nn.Module):
             if self.enable_skips and i > 0:
                 x.append(input_features[i - 1])
 
-            x = torch.cat(x,1)
+            x = torch.cat(x, 1)
             x = self.iconvs[f"iconv_{i}_1"](x)
 
             if i in self.scales:
@@ -56,10 +60,7 @@ class DepthDecoder2(nn.Module):
     def _conv_block(self, in_channels, out_channels):
         """Convolution block + ELU activation."""
         conv_layer = self._conv3_disp(in_channels, out_channels)
-        return nn.Sequential(
-            conv_layer,
-            nn.ELU(inplace=True)
-        )
+        return nn.Sequential(conv_layer, nn.ELU(inplace=True))
 
     def _conv3_disp(self, in_channels, out_channels, use_refl=True):
         """3x3 convolution block with padding and optional reflection padding."""
@@ -68,7 +69,7 @@ class DepthDecoder2(nn.Module):
         else:
             pad = nn.ZeroPad2d(1)
         conv = nn.Conv2d(in_channels, out_channels, 3)
-        
+
         return nn.Sequential(pad, conv)
 
     def _upsample(self, x):

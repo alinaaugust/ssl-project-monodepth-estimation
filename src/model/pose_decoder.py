@@ -1,12 +1,20 @@
 import torch
 import torch.nn as nn
 
+
 class PoseEstimationDecoder(nn.Module):
     """
-    Decoder for predicting pose transformations (rotations and translations) 
+    Decoder for predicting pose transformations (rotations and translations)
     from input feature maps.
     """
-    def __init__(self, encoder_channels, input_feature_count, frames_to_predict=None, kernel_stride=1):
+
+    def __init__(
+        self,
+        encoder_channels,
+        input_feature_count,
+        frames_to_predict=None,
+        kernel_stride=1,
+    ):
         """
         Args:
             encoder_channels (list): Channels from the encoder layers.
@@ -18,14 +26,28 @@ class PoseEstimationDecoder(nn.Module):
 
         self.encoder_channels = encoder_channels
         self.input_feature_count = input_feature_count
-        self.frames_to_predict = frames_to_predict if frames_to_predict is not None else input_feature_count - 1
+        self.frames_to_predict = (
+            frames_to_predict
+            if frames_to_predict is not None
+            else input_feature_count - 1
+        )
 
-        self.layers = nn.ModuleDict({
-            "compress": nn.Conv2d(self.encoder_channels[-1], 256, kernel_size=1),
-            "pconv_0": nn.Conv2d(input_feature_count * 256, 256, kernel_size=3, stride=kernel_stride, padding=1),
-            "pconv_1": nn.Conv2d(256, 256, kernel_size=3, stride=kernel_stride, padding=1),
-            "pconv_2": nn.Conv2d(256, 6 * self.frames_to_predict, kernel_size=1),
-        })
+        self.layers = nn.ModuleDict(
+            {
+                "compress": nn.Conv2d(self.encoder_channels[-1], 256, kernel_size=1),
+                "pconv_0": nn.Conv2d(
+                    input_feature_count * 256,
+                    256,
+                    kernel_size=3,
+                    stride=kernel_stride,
+                    padding=1,
+                ),
+                "pconv_1": nn.Conv2d(
+                    256, 256, kernel_size=3, stride=kernel_stride, padding=1
+                ),
+                "pconv_2": nn.Conv2d(256, 6 * self.frames_to_predict, kernel_size=1),
+            }
+        )
 
         self.activation = nn.ReLU()
 
@@ -40,7 +62,10 @@ class PoseEstimationDecoder(nn.Module):
             tuple: Predicted rotations and translations.
         """
         last_layer_features = [features[-1] for features in feature_inputs]
-        compressed_features = [self.activation(self.layers["compress"](feature)) for feature in last_layer_features]
+        compressed_features = [
+            self.activation(self.layers["compress"](feature))
+            for feature in last_layer_features
+        ]
         concatenated = torch.cat(compressed_features, dim=1)
 
         x = concatenated

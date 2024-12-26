@@ -11,6 +11,7 @@ class MultiImageResNet(models.ResNet):
 
     Adapted from torchvision's ResNet implementation.
     """
+
     def __init__(self, block_type, layer_config, num_classes=1000, num_image_frames=1):
         """
         Args:
@@ -22,12 +23,12 @@ class MultiImageResNet(models.ResNet):
         super(MultiImageResNet, self).__init__(block_type, layer_config)
         self.input_channels = 64
         self.conv1 = nn.Conv2d(
-            in_channels=num_image_frames * 3, 
-            out_channels=64, 
-            kernel_size=7, 
-            stride=2, 
-            padding=3, 
-            bias=False
+            in_channels=num_image_frames * 3,
+            out_channels=64,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
         )
         self.bn1 = nn.BatchNorm2d(64)
         self.activation = nn.ReLU(inplace=True)
@@ -37,11 +38,17 @@ class MultiImageResNet(models.ResNet):
         output_channels = [64, 128, 256, 512]
         for idx, num_blocks in enumerate(layer_config):
             stride = 2 if idx > 0 else 1
-            self.stages.append(self._make_layer(block_type, output_channels[idx], num_blocks, stride=stride))
+            self.stages.append(
+                self._make_layer(
+                    block_type, output_channels[idx], num_blocks, stride=stride
+                )
+            )
 
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
-                nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+                nn.init.kaiming_normal_(
+                    module.weight, mode="fan_out", nonlinearity="relu"
+                )
             elif isinstance(module, nn.BatchNorm2d):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0)
@@ -71,6 +78,7 @@ class MultiImageResNet(models.ResNet):
 
 class ResNetEncoder(nn.Module):
     """ResNet encoder for feature extraction."""
+
     def __init__(self, num_layers, pretrained=False, num_input_images=1):
         """
         Args:
@@ -87,7 +95,7 @@ class ResNetEncoder(nn.Module):
             34: (models.resnet.BasicBlock, [3, 4, 6, 3]),
             50: (models.resnet.Bottleneck, [3, 4, 6, 3]),
             101: (models.resnet.Bottleneck, [3, 4, 23, 3]),
-            152: (models.resnet.Bottleneck, [3, 8, 36, 3])
+            152: (models.resnet.Bottleneck, [3, 8, 36, 3]),
         }
 
         if num_layers not in resnet_configs:
@@ -102,7 +110,9 @@ class ResNetEncoder(nn.Module):
             self.num_ch_enc[1:] *= 4
 
         if pretrained and num_input_images == 1:
-            state_dict = model_zoo.load_url(models.resnet.model_urls[f'resnet{num_layers}'])
+            state_dict = model_zoo.load_url(
+                models.resnet.model_urls[f"resnet{num_layers}"]
+            )
             self.encoder.load_state_dict(state_dict)
 
     def forward(self, input_image):
