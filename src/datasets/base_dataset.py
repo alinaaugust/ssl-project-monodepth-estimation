@@ -66,7 +66,8 @@ class BaseDataset(Dataset):
         self.get_tensor = transforms.ToTensor()
         self.get_resize = {
             i: transforms.Resize(
-                (self.height // 2**i, self.width // 2**i), interpolation=Image.ANTIALIAS
+                (self.height // 2 ** i, self.width // 2 ** i),
+                interpolation=Image.ANTIALIAS,
             )
             for i in range(self.num_scaling_factors)
         }
@@ -133,8 +134,8 @@ class BaseDataset(Dataset):
         for scale_idx in range(self.num_scaling_factors):
             K = self.K.copy()
 
-            K[0, :] *= self.width // (2**scale_idx)
-            K[1, :] *= self.height // (2**scale_idx)
+            K[0, :] *= self.width // (2 ** scale_idx)
+            K[1, :] *= self.height // (2 ** scale_idx)
 
             inv_K = np.linalg.pinv(K)
 
