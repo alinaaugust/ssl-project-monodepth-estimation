@@ -61,6 +61,10 @@ class BaseDataset(Dataset):
         """
         super(BaseDataset, self).__init__()
         self.data_dir = data_dir
+        if split == "train":
+            self.data_dir = self.data_dir / "train"
+        elif split == "val":
+            self.data_dir = self.data_dir / "val"
         self.filenames = filenames
 
         self.height = height
@@ -81,7 +85,7 @@ class BaseDataset(Dataset):
         self.get_tensor = transforms.ToTensor()
         self.get_resize = {
             i: transforms.Resize(
-                (self.height // 2 ** i, self.width // 2 ** i),
+                (self.height // 2**i, self.width // 2**i),
                 interpolation=Image.ANTIALIAS,
             )
             for i in range(self.num_scaling_factors)
@@ -130,7 +134,7 @@ class BaseDataset(Dataset):
         instance_info = self.filenames[ind].split()
         path, idx, side = None, 0, None
         path = instance_info[0]
-        path = path[path.find('/') + 1:]
+        path = path[path.find("/") + 1 :]
 
         if len(instance_info) == 3:
             idx = instance_info[1]
@@ -150,8 +154,8 @@ class BaseDataset(Dataset):
         for scale_idx in range(self.num_scaling_factors):
             K = self.K.copy()
 
-            K[0, :] *= self.width // (2 ** scale_idx)
-            K[1, :] *= self.height // (2 ** scale_idx)
+            K[0, :] *= self.width // (2**scale_idx)
+            K[1, :] *= self.height // (2**scale_idx)
 
             inv_K = np.linalg.pinv(K)
 

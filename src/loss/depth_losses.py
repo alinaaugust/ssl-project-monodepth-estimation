@@ -7,8 +7,8 @@ def depth_errors(ground_truth, prediction):
     """
     ratio = np.maximum(ground_truth / prediction, prediction / ground_truth)
     delta1 = (ratio < 1.25).mean()
-    delta2 = (ratio < 1.25 ** 2).mean()
-    delta3 = (ratio < 1.25 ** 3).mean()
+    delta2 = (ratio < 1.25**2).mean()
+    delta3 = (ratio < 1.25**3).mean()
 
     mse = (ground_truth - prediction) ** 2
     rmse = np.sqrt(np.mean(mse))

@@ -39,8 +39,8 @@ class SSIMLoss(nn.Module):
 
         self.pad_reflection = nn.ReflectionPad2d(1)
 
-        self.epsilon1 = 0.01 ** 2
-        self.epsilon2 = 0.03 ** 2
+        self.epsilon1 = 0.01**2
+        self.epsilon2 = 0.03**2
 
     def forward(self, img1, img2):
 
@@ -50,14 +50,12 @@ class SSIMLoss(nn.Module):
         mean_x = self.mean_x_pool(img1)
         mean_y = self.mean_y_pool(img2)
 
-        var_x = self.var_x_pool(img1 ** 2) - mean_x ** 2
-        var_y = self.var_y_pool(img2 ** 2) - mean_y ** 2
+        var_x = self.var_x_pool(img1**2) - mean_x**2
+        var_y = self.var_y_pool(img2**2) - mean_y**2
         cov_xy = self.cov_xy_pool(img1 * img2) - mean_x * mean_y
 
         num = (2 * mean_x * mean_y + self.epsilon1) * (2 * cov_xy + self.epsilon2)
-        den = (mean_x ** 2 + mean_y ** 2 + self.epsilon1) * (
-            var_x + var_y + self.epsilon2
-        )
+        den = (mean_x**2 + mean_y**2 + self.epsilon1) * (var_x + var_y + self.epsilon2)
 
         return torch.clamp((1 - num / den) / 2, 0, 1)
 
@@ -204,9 +202,7 @@ def calculate_losses(data_inputs, model_outputs, settings):
         )
 
         current_loss += (
-            settings["config"].disparity_smoothness
-            * smoothness_loss
-            / (2 ** scale_level)
+            settings["config"].disparity_smoothness * smoothness_loss / (2**scale_level)
         )
         cumulative_loss += current_loss
 
