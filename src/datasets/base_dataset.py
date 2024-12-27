@@ -60,11 +60,25 @@ class BaseDataset(Dataset):
                 tensor name.
         """
         super(BaseDataset, self).__init__()
+        try:
+            self.brightness = (0.8, 1.2)
+            self.contrast = (0.8, 1.2)
+            self.saturation = (0.8, 1.2)
+            self.hue = (-0.1, 0.1)
+            transforms.ColorJitter.get_params(
+                self.brightness, self.contrast, self.saturation, self.hue)
+        except TypeError:
+            self.brightness = 0.2
+            self.contrast = 0.2
+            self.saturation = 0.2
+            self.hue = 0.1
+
         self.data_dir = data_dir
-        if split == "train":
-            self.data_dir = self.data_dir / "train"
-        elif split == "val":
-            self.data_dir = self.data_dir / "val"
+        # if split == "train":
+        #     self.data_dir = self.data_dir + "/train"
+        # elif split == "val":
+        #     self.data_dir = self.data_dir + "/val"
+        
         self.filenames = filenames
 
         self.height = height
@@ -91,7 +105,7 @@ class BaseDataset(Dataset):
             for i in range(self.num_scaling_factors)
         }
 
-        self.get_depth = self.check_depth()
+        # self.get_depth = self.check_depth()
         self.colorjitter_params = colorjitter_params
 
     def __getitem__(self, ind):
@@ -135,7 +149,6 @@ class BaseDataset(Dataset):
         path, idx, side = None, 0, None
         path = instance_info[0]
         # path = path[path.find('/') + 1:]
-
         if len(instance_info) == 3:
             idx = instance_info[1]
             side = instance_info[2]
@@ -148,7 +161,7 @@ class BaseDataset(Dataset):
                 )
             else:
                 instance_data[("color", f, -1)] = self.get_color(
-                    path, idx + str(f), side, use_flip
+                    path, idx, side, use_flip
                 )
 
         for scale_idx in range(self.num_scaling_factors):
@@ -168,12 +181,12 @@ class BaseDataset(Dataset):
             del instance_data[("color", f, -1)]
             del instance_data[("color_transformed", f, -1)]
 
-        if self.get_depth:
-            target_depth = self.get_depth(path, idx, side, use_flip)
-            instance_data["target_depth"] = np.expand_dims(target_depth, 0)
-            instance_data["target_depth"] = torch.from_numpy(
-                instance_data["target_depth"].astype(np.float32)
-            )
+        # if self.get_depth is not None:
+        #     target_depth = self.get_depth(path, idx, side, use_flip)
+        #     instance_data["target_depth"] = np.expand_dims(target_depth, 0)
+        #     instance_data["target_depth"] = torch.from_numpy(
+        #         instance_data["target_depth"].astype(np.float32)
+        #     )
 
         if "s" in self.frames:
             stereo_T = np.eye(4, dtype=np.float32)
@@ -203,7 +216,7 @@ class BaseDataset(Dataset):
             instance_data (dict): dict, containing instance (possibly transformed via
                 instance transform).
         """
-        for key, _ in instance_data.items():
+        for key in list(instance_data):
             if "color" in key:
                 n, im, i = key
                 for i in range(self.num_scaling_factors):
@@ -211,16 +224,17 @@ class BaseDataset(Dataset):
                         instance_data[(n, im, i - 1)]
                     )
 
-        for key, frame in instance_data.items():
+        for key in list(instance_data):
+            frame = instance_data[key]
             if "color" in key:
                 n, im, i = key
                 instance_data[(n, im, i)] = self.get_tensor(frame)
                 if use_color:
                     transform = transforms.ColorJitter.get_params(
-                        self.colorjitter_params["brightness"],
-                        self.colorjitter_params["contrast"],
-                        self.colorjitter_params["saturation"],
-                        self.colorjitter_params["hue"],
+                        self.brightness,
+                        self.contrast,
+                        self.saturation,
+                        self.hue,
                     )
                     frame = transform(frame)
                 instance_data[(n + "_transformed", im, i)] = self.get_tensor(frame)

@@ -16,7 +16,7 @@ class BackprojectDepth(nn.Module):
         meshgrid = np.meshgrid(range(self.width), range(self.height), indexing="xy")
         self.id_coords = np.stack(meshgrid, axis=0).astype(np.float32)
         self.id_coords = nn.Parameter(
-            torch.from_numpy(self.id_coords), requires_grad=False
+            torch.from_numpy(np.array(self.id_coords)), requires_grad=False
         )
 
         self.ones = nn.Parameter(

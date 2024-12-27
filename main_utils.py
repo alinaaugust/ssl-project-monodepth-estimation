@@ -149,13 +149,18 @@ def transformation_from_parameters(axisangle, translation, invert=False):
     """Convert the network's (axisangle, translation) output into a 4x4 matrix"""
     R = rot_from_axisangle(axisangle)
     t = translation.clone()
-
+    
     if invert:
         R = R.transpose(1, 2)
         t *= -1
 
     T = get_translation_matrix(t)
-
+    print("R shape:", R.shape)
+    print("T shape:", T.shape)
+    print("R device:", R.device)
+    print("T device:", T.device)
+    print(R)
+    print(T)
     if invert:
         M = torch.matmul(R, T)
     else:
