@@ -5,77 +5,6 @@ from torchvision import models
 import torch.utils.model_zoo as model_zoo
 
 
-# class MultiImageResNet(models.ResNet):
-#     """
-#     ResNet variant that supports a custom number of input image frames.
-
-#     Adapted from torchvision's ResNet implementation.
-#     """
-
-#     def __init__(self, block_type, layer_config, num_classes=1000, num_image_frames=1):
-#         """
-#         Args:
-#             block_type (nn.Module): BasicBlock or Bottleneck block.
-#             layer_config (list): Number of layers for each ResNet stage.
-#             num_classes (int, optional): Number of output classes. Defaults to 1000.
-#             num_image_frames (int, optional): Number of stacked input image frames. Defaults to 1.
-#         """
-#         super(MultiImageResNet, self).__init__(block_type, layer_config)
-#         self.input_channels = 64
-#         self.conv1 = nn.Conv2d(
-#             in_channels=num_image_frames * 3,
-#             out_channels=64,
-#             kernel_size=7,
-#             stride=2,
-#             padding=3,
-#             bias=False,
-#         )
-#         self.bn1 = nn.BatchNorm2d(64)
-#         self.activation = nn.ReLU(inplace=True)
-#         self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-#         self.stages = nn.ModuleList()
-#         output_channels = [64, 128, 256, 512]
-#         for idx, num_blocks in enumerate(layer_config):
-#             stride = 2 if idx > 0 else 1
-#             self.stages.append(
-#                 self._make_layer(
-#                     block_type, output_channels[idx], num_blocks, stride=stride
-#                 )
-#             )
-
-#         for module in self.modules():
-#             if isinstance(module, nn.Conv2d):
-#                 nn.init.kaiming_normal_(
-#                     module.weight, mode="fan_out", nonlinearity="relu"
-#                 )
-#             elif isinstance(module, nn.BatchNorm2d):
-#                 nn.init.constant_(module.weight, 1)
-#                 nn.init.constant_(module.bias, 0)
-
-#     def forward(self, x):
-#         """
-#         Forward pass for the network.
-
-#         Args:
-#             x (torch.Tensor): Input tensor.
-
-#         Returns:
-#             list: List of feature maps from each ResNet stage.
-#         """
-#         x = self.conv1(x)
-#         x = self.bn1(x)
-#         x = self.activation(x)
-#         features = [x]
-
-#         x = self.pool(x)
-#         for stage in self.stages:
-#             x = stage(x)
-#             features.append(x)
-
-#         return features
-
-
 class MultiImageResNet(models.ResNet):
     """Constructs a resnet model with varying number of input images.
     Adapted from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
@@ -124,7 +53,6 @@ class ResNetEncoder(nn.Module):
             101: (models.resnet.Bottleneck, [3, 4, 23, 3]),
             152: (models.resnet.Bottleneck, [3, 8, 36, 3]),
         }
-        print(num_layers)
         if num_layers not in resnet_configs:
             raise ValueError(f"{num_layers} is not a valid number of ResNet layers")
 
@@ -150,6 +78,14 @@ class ResNetEncoder(nn.Module):
         Returns:
             list: List of feature maps from each ResNet stage.
         """
-        input_image = (input_image - 0.45) / 0.225
-        features = self.encoder(input_image)
-        return features
+        self.x = []
+        x = (input_image - 0.45) / 0.225
+        x = self.encoder.conv1(x)
+        x = self.encoder.bn1(x)
+        self.x.append(self.encoder.relu(x))
+        self.x.append(self.encoder.layer1(self.encoder.maxpool(self.x[-1])))
+        self.x.append(self.encoder.layer2(self.x[-1]))
+        self.x.append(self.encoder.layer3(self.x[-1]))
+        self.x.append(self.encoder.layer4(self.x[-1]))
+
+        return self.x

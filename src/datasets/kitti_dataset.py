@@ -57,7 +57,7 @@ class KITTIRAWDataset(KITTIDataset):
         super(KITTIRAWDataset, self).__init__(*args, **kwargs)
 
     def get_image_path(self, folder, frame_index, side):
-        f_str = "{:010d}{}".format(frame_index, self.img_format)
+        f_str = "{:010d}{}".format(int(frame_index), self.img_format)
         image_path = os.path.join(
             self.data_dir, folder, "image_0{}/data".format(self.side_map[side]), f_str
         )
