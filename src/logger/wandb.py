@@ -48,7 +48,7 @@ class WandBWriter:
                 config=project_config,
                 name=run_name,
                 resume="allow",  # resume the run if run_id existed
-                id=self.run_id,
+                id=str(self.run_id),
                 mode=mode,
                 save_code=kwargs.get("save_code", False),
             )

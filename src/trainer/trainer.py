@@ -44,6 +44,7 @@ class Trainer:
             False if (self.config.use_stereo and self.config.frame_ids == [0]) else True
         )
 
+
         self.logs_dir = os.path.join(self.config.logs_dir, self.config.run_name)
 
         if self.config.use_stereo:
@@ -72,7 +73,7 @@ class Trainer:
                     self.models["pose_encoder"].num_ch_enc,
                     input_feature_count=1,
                     frames_to_predict=2,
-                )
+                ).to(self.device)
 
             elif self.config.pose_model_type == "shared":
                 self.models["pose"] = PoseEstimationDecoder(
@@ -203,6 +204,7 @@ class Trainer:
         """
         self.depth = 0
         self.epoch = 0
+        self.step = 0 
         for _ in range(self.config.num_epochs):
             self.epoch += 1
             self.train_epoch()
@@ -239,9 +241,9 @@ class Trainer:
             duration = time.time() - before_op_time
 
             early_phase = (
-                batch_idx % self.config.log_frequency == 0 and self.step < 2000
+                batch_idx % self.config.log_frequency == 0 and self.epoch < 2000
             )
-            late_phase = self.step % 2000 == 0
+            late_phase = self.epoch % 2000 == 0
 
             if early_phase or late_phase:
                 self.writer.set_step(self.step)
@@ -256,16 +258,17 @@ class Trainer:
                 for l, v in losses.items():
                     self.writer.add_scalar(l, v)
                 self.val()
+                self.step += 1
 
-            self.step += 1
+            self.epoch += 1
 
     def log_time(self, batch_idx, duration, loss):
         """Print a logging statement to the terminal"""
         samples_per_sec = self.opt.batch_size / duration
         time_sofar = time.time() - self.start_time
         training_time_left = (
-            (self.num_total_steps / self.step - 1.0) * time_sofar
-            if self.step > 0
+            (self.num_total_steps / self.epoch - 1.0) * time_sofar
+            if self.epoch > 0
             else 0
         )
         print_string = (
@@ -295,7 +298,7 @@ class Trainer:
                 pose_feats = {f_i: features[f_i] for f_i in self.config.frame_ids}
             else:
                 pose_feats = {
-                    f_i: inputs["color_aug", f_i, 0] for f_i in self.config.frame_ids
+                    f_i: inputs["color_transformed", f_i, 0] for f_i in self.config.frame_ids
                 }
 
             for f_i in self.config.frame_ids[1:]:
@@ -327,7 +330,7 @@ class Trainer:
             if self.config.pose_model_type in ["separate_resnet", "posecnn"]:
                 pose_inputs = torch.cat(
                     [
-                        inputs[("color_aug", i, 0)]
+                        inputs[("color_transformed", i, 0)]
                         for i in self.config.frame_ids
                         if i != "s"
                     ],
@@ -476,10 +479,10 @@ class Trainer:
             inputs[key] = ipt.to(self.device)
 
         if self.config.pose_model_type == "shared":
-            all_color_aug = torch.cat(
-                [inputs[("color_aug", i, 0)] for i in self.config.frame_ids]
+            all_color_transformed = torch.cat(
+                [inputs[("color_transformed", i, 0)] for i in self.config.frame_ids]
             )
-            all_features = self.models["encoder"](all_color_aug)
+            all_features = self.models["encoder"](all_color_transformed)
             all_features = [
                 torch.split(f, self.config.batch_size) for f in all_features
             ]
@@ -488,15 +491,16 @@ class Trainer:
             for i, k in enumerate(self.config.frame_ids):
                 features[k] = [f[i] for f in all_features]
 
-            outputs = self.models["depth"](features[0])
+            outputs = self.models["depth_decoder"](features[0])
         else:
-            features = self.models["encoder"](inputs["color_aug", 0, 0])
-            outputs = self.models["depth"](features)
 
-        if self.config.predictive_mask:
+            features = self.models["encoder"](inputs["color_transformed", 0, 0])
+            outputs = self.models["depth_decoder"](features)
+
+        if self.config.use_predictive_mask:
             outputs["predictive_mask"] = self.models["predictive_mask"](features)
 
-        if self.use_pose_net:
+        if self.use_pose_model:
             outputs.update(self.predict_poses(inputs, features))
 
         self.generate_images_pred(inputs, outputs)
