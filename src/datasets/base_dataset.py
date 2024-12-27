@@ -72,6 +72,12 @@ class BaseDataset(Dataset):
         self.split = split
         self.loader = pil_loader
 
+        self.data_dir = data_dir
+        if split == "train":
+            self.data_dir = self.data_dir + "/train"
+        elif split == "val":
+            self.data_dir = self.data_dir + "/val"
+
         self.get_tensor = transforms.ToTensor()
         self.get_resize = {
             i: transforms.Resize(
@@ -124,6 +130,7 @@ class BaseDataset(Dataset):
         instance_info = self.filenames[ind].split()
         path, idx, side = None, 0, None
         path = instance_info[0]
+        path = path[path.find('/') + 1:]
 
         if len(instance_info) == 3:
             idx = instance_info[1]
