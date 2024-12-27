@@ -28,8 +28,9 @@ from IPython import embed
 
 
 class Trainer:
-    def __init__(self, config):
+    def __init__(self, writer, config):
         self.config = config
+        self.writer = writer
         self.device = self.config.device
 
         self.models = {}
@@ -168,8 +169,8 @@ class Trainer:
         self.backproject_depth = {}
         self.project_3d = {}
         for scale in self.config.scaling_factors:
-            h = self.config.height // (2 ** scale)
-            w = self.config.width // (2 ** scale)
+            h = self.config.height // (2**scale)
+            w = self.config.width // (2**scale)
 
             self.backproject_depth[scale] = BackprojectDepth(
                 self.config.batch_size, h, w
@@ -222,6 +223,9 @@ class Trainer:
         for model in self.models.values():
             model.train()
 
+        self.writer.set_step(self.step)
+        self.writer.add_scalar("epoch", self.epoch)
+
         for batch_idx, inputs in enumerate(self.train_loader):
 
             before_op_time = time.time()
@@ -240,16 +244,44 @@ class Trainer:
             late_phase = self.step % 2000 == 0
 
             if early_phase or late_phase:
-                # TODO - logging
-                # self.log_time(batch_idx, duration, losses["loss"].cpu().data)
+                self.writer.set_step(self.step)
+                self.log_time(batch_idx, duration, losses["loss"].cpu().data)
 
+                self.writer.add_scalar(
+                    "learning rate", self.lr_scheduler.get_last_lr()[0]
+                )
                 if "depth_gt" in inputs:
                     self.compute_depth_losses(inputs, outputs, losses)
 
-                # self.log("train", inputs, outputs, losses)
+                for l, v in losses.items():
+                    self.writer.add_scalar(l, v)
                 self.val()
 
             self.step += 1
+
+    def log_time(self, batch_idx, duration, loss):
+        """Print a logging statement to the terminal"""
+        samples_per_sec = self.opt.batch_size / duration
+        time_sofar = time.time() - self.start_time
+        training_time_left = (
+            (self.num_total_steps / self.step - 1.0) * time_sofar
+            if self.step > 0
+            else 0
+        )
+        print_string = (
+            "epoch {:>3} | batch {:>6} | examples/s: {:5.1f}"
+            + " | loss: {:.5f} | time elapsed: {} | time left: {}"
+        )
+        print(
+            print_string.format(
+                self.epoch,
+                batch_idx,
+                samples_per_sec,
+                loss,
+                sec_to_hm_str(time_sofar),
+                sec_to_hm_str(training_time_left),
+            )
+        )
 
     def predict_poses(self, inputs, features):
         """Predict poses between input frames for monocular sequences."""

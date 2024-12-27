@@ -11,9 +11,9 @@ def pose_errors(ground_truth, predicted_poses):
 
     # Optimize scaling factor
     scaling_factor = np.sum(ground_truth * aligned_predictions) / np.sum(
-        aligned_predictions ** 2
+        aligned_predictions**2
     )
     alignment_difference = aligned_predictions * scaling_factor - ground_truth
-    rmse = np.sqrt(np.sum(alignment_difference ** 2)) / ground_truth.shape[0]
+    rmse = np.sqrt(np.sum(alignment_difference**2)) / ground_truth.shape[0]
 
     return rmse

@@ -13,11 +13,10 @@ class WandBWriter:
 
     def __init__(
         self,
-        logger,
         project_config,
-        project_name,
+        project_name="monodepth-estimation",
         entity=None,
-        run_id=None,
+        run_id=8,
         run_name=None,
         mode="online",
         **kwargs,
@@ -26,7 +25,6 @@ class WandBWriter:
         API key is expected to be provided by the user in the terminal.
 
         Args:
-            logger (Logger): logger that logs output.
             project_config (dict): config for the current experiment.
             project_name (str): name of the project inside experiment tracker.
             entity (str | None): name of the entity inside experiment
@@ -57,7 +55,7 @@ class WandBWriter:
             self.wandb = wandb
 
         except ImportError:
-            logger.warning("For use wandb install it via \n\t pip install wandb")
+            print("For use wandb install it via \n\t pip install wandb")
 
         self.step = 0
         # the mode is usually equal to the current partition name
