@@ -40,8 +40,9 @@ class MonodepthOptions:
             "--split",
             type=str,
             help="which training split to use",
-            choices=["eigen_zhou", "eigen_full", "odom", "benchmark"],
-            default="eigen_zhou",
+            choices=["eigen_zhou", "eigen_full", "odom", "benchmark", "small_version"],
+            # default="eigen_zhou",
+            default='small_version',
         )
         self.parser.add_argument(
             "--num_layers",
