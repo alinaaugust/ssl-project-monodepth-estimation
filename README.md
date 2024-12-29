@@ -62,7 +62,9 @@ The primary goal of the project is to replicate the results of the method descri
 
 To start training with default parameters, run the following command:
 
-   python train.py  
+```bash
+   python train.py
+```
 
 This will initialize the training process using the predefined configuration. Make sure all necessary files and dependencies are properly set up before running the script.
 
