@@ -58,6 +58,14 @@ Follow these steps to install the project:
 
 The primary goal of the project is to replicate the results of the method described in the paper by Godard et al. (2019). The approach involves the use of three interconnected models, each with specific architectural features and purposes.
 
+## Training
+
+To start training with default parameters, run the following command:
+
+   python train.py  
+
+This will initialize the training process using the predefined configuration. Make sure all necessary files and dependencies are properly set up before running the script.
+
 The general workflow of the system is illustrated below:
 
 ### Encoder
@@ -74,11 +82,23 @@ The Depth Network is responsible for predicting disparity, which is later conver
 
 The Pose Network predicts the relative motion (pose change) between two consecutive frames. This information is later used to train both the Pose and Depth Networks.
 
-### File Paths
+#### File Paths
 
     ResNet18 Encoder with Pretrained Weights: src/model/resnet_encoder.py
     Pose Network: src/model/pose_decoder.py
-    Depth Network (UNet): src/model/depth_decoder.py
+    Depth Network: src/model/depth_decoder.py
+    
+### Data and Training Process
+
+The data consists of sequential frames extracted from videos, and the training process is based on pairs of consecutive frames.
+
+1. Depth Prediction: The depth of one frame is predicted using the Depth Network.
+
+2. Relative Motion Estimation: The Pose Network estimates the relative motion (pose change) between the two frames.
+
+3. Depth Projection and Reconstruction: Using the estimated depth and relative motion, the depth map of one frame is projected onto the second frame. The second frame is then reconstructed based on this projection.
+
+4. Loss Calculation: The reconstructed frame is compared with the actual frame to compute the loss functions. The weights of the Depth and Pose Networks are updated based on these loss values.
 
 ## Credits
 
